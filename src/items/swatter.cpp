@@ -62,7 +62,7 @@ Swatter::Swatter(AbstractKart *kart, int16_t bomb_ticks, int ticks,
                   Attachment* attachment)
        : AttachmentPlugin(kart, attachment)
 {
-    m_animation_phase  = SWATTER_AIMING;
+    m_animation_phase  = SWATTER_SPAWNING;
     m_discard_now      = false;
     m_closest_kart     = NULL;
     m_discard_ticks    = World::getWorld()->getTicksSinceStart() + ticks;
@@ -82,6 +82,8 @@ Swatter::Swatter(AbstractKart *kart, int16_t bomb_ticks, int ticks,
     m_swat_sound = NULL;
     m_swatter_animation_ticks = 0;
     m_played_swatter_animation = false;
+
+    attachment->prevent_default_spawn_anim();
 }   // Swatter
 
 // ----------------------------------------------------------------------------
@@ -172,15 +174,21 @@ void Swatter::updateGraphics(float dt)
             {
                 m_scene_node->setMesh(attachment_manager
                     ->getMesh(Attachment::ATTACH_NOLOKS_SWATTER));
+                m_scene_node->setPosition(SWAT_POS_OFFSET);
+                m_scene_node->setCurrentFrame(0.0f);
+                m_scene_node->setLoopMode(false);
+                m_scene_node->setAnimationSpeed(0.0f);
             }
             else
             {
                 m_scene_node->setMesh(attachment_manager
-                    ->getMesh(Attachment::ATTACH_SWATTER));
+                    ->getMesh(Attachment::ATTACH_SWATTER_SPAWN));
+                m_scene_node->setPosition(SWAT_POS_OFFSET);
+                m_scene_node->setRotation(core::vector3df(0.0, 0.0, 0.0));
+                m_scene_node->setCurrentFrame(1.0f);
+                m_scene_node->setLoopMode(true);
+                m_scene_node->setAnimationSpeed(150.0f);
             }
-            m_scene_node->setPosition(SWAT_POS_OFFSET);
-            m_scene_node->setLoopMode(false);
-            m_scene_node->setAnimationSpeed(0.0f);
         }
         if (!m_swat_sound)
         {
@@ -193,6 +201,13 @@ void Swatter::updateGraphics(float dt)
         {
             switch (m_animation_phase)
             {
+            case SWATTER_SPAWNING:
+                {
+                    m_scene_node->setRotation(core::vector3df(0.0f, 0.0f, 0.0f));
+                }
+                break;
+            case SWATTER_DESPAWNING:
+                break;
             case SWATTER_AIMING:
                 {
                     pointToTarget();
@@ -244,13 +259,38 @@ bool Swatter::updateAndTestFinished(int ticks)
     {
         switch (m_animation_phase)
         {
+        case SWATTER_SPAWNING:
+            {
+                if (m_swatter_duration - m_attachment->getTicksLeft() < 60)
+                {
+                    return false;
+                }
+                else
+                {
+                    m_animation_phase = SWATTER_AIMING;
+                    m_scene_node->setMesh(attachment_manager
+                        ->getMesh(Attachment::ATTACH_SWATTER));
+                    m_scene_node->setPosition(SWAT_POS_OFFSET);
+                    m_scene_node->setCurrentFrame(0.0f);
+                    m_scene_node->setLoopMode(false);
+                    m_scene_node->setAnimationSpeed(0.0f);
+                }
+            }
+            break;
+        case SWATTER_DESPAWNING:
+            break;
         case SWATTER_AIMING:
             {
-                // Avoid swatter near the start and the end lifetime of swatter
-                // to make sure all clients know the existence of swatter each other
-                if (m_swatter_duration - m_attachment->getTicksLeft() < 60 ||
-                    m_attachment->getTicksLeft() < 90) // ~20 and ~60 below
+                if (m_attachment->getTicksLeft() < 90)
+                {
+                    m_animation_phase = SWATTER_DESPAWNING;
+                    m_scene_node->setMesh(attachment_manager
+                        ->getMesh(Attachment::ATTACH_SWATTER_DESPAWN));
+                    m_scene_node->setCurrentFrame(0.0f);
+                    m_scene_node->setLoopMode(false);
+                    m_scene_node->setAnimationSpeed(150.0f);
                     return false;
+                }
 
                 chooseTarget();
                 if (!m_closest_kart)

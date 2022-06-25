@@ -61,6 +61,7 @@ Attachment::Attachment(AbstractKart* kart)
     m_graphical_type       = ATTACH_NOTHING;
     m_scaling_end_ticks    = -1;
     m_node = NULL;
+    m_default_anim = true;
     if (GUIEngine::isNoGraphics())
         return;
     // If we attach a NULL mesh, we get a NULL scene node back. So we
@@ -514,6 +515,8 @@ void Attachment::update(int ticks)
         break;
     case ATTACH_NOLOKS_SWATTER:
     case ATTACH_SWATTER_ANIM:
+    case ATTACH_SWATTER_SPAWN:
+    case ATTACH_SWATTER_DESPAWN:
         // Should never be called, these symbols are only used as an index for
         // the model, Nolok's attachment type is ATTACH_SWATTER
         assert(false);
@@ -611,21 +614,30 @@ void Attachment::updateGraphics(float dt)
         m_node->setVisible(true);
         bool is_shield = m_type == ATTACH_BUBBLEGUM_SHIELD ||
                         m_type == ATTACH_NOLOK_BUBBLEGUM_SHIELD;
-        float wanted_node_scale = is_shield ?
-            std::max(1.0f, m_kart->getHighestPoint() * 1.1f) : 1.0f;
-        float scale_ratio = stk_config->ticks2Time(m_scaling_end_ticks -
-            World::getWorld()->getTicksSinceStart()) / 0.7f;
-        if (scale_ratio > 0.0f)
+
+        if (m_default_anim)
         {
-            float scale = 0.3f * scale_ratio +
+            float wanted_node_scale = is_shield ?
+                std::max(1.0f, m_kart->getHighestPoint() * 1.1f) : 1.0f;
+            float scale_ratio = stk_config->ticks2Time(m_scaling_end_ticks -
+                World::getWorld()->getTicksSinceStart()) / 0.7f;
+            if (scale_ratio > 0.0f)
+            {
+                float scale = 0.3f * scale_ratio +
                 wanted_node_scale * (1.0f - scale_ratio);
-            m_node->setScale(core::vector3df(scale, scale, scale));
+                m_node->setScale(core::vector3df(scale, scale, scale));    
+            }
+            else
+            {
+                m_node->setScale(core::vector3df(
+                    wanted_node_scale, wanted_node_scale, wanted_node_scale));
+            }
         }
         else
         {
-            m_node->setScale(core::vector3df(
-                wanted_node_scale, wanted_node_scale, wanted_node_scale));
+            m_node->setScale(core::vector3df(1.0f, 1.0f, 1.0f));
         }
+
         int slow_flashes = stk_config->time2Ticks(3.0f);
         if (is_shield && m_ticks_left < slow_flashes)
         {

@@ -53,7 +53,9 @@ private:
     {
         SWATTER_AIMING = 0,
         SWATTER_TO_TARGET = 1,
-        SWATTER_FROM_TARGET = 2
+        SWATTER_FROM_TARGET = 2,
+        SWATTER_SPAWNING = 3,
+        SWATTER_DESPAWNING = 4
     };
     AnimationPhase m_animation_phase;
 

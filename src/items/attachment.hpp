@@ -65,10 +65,12 @@ public:
         ATTACH_BOMB = 2,
         // End of fixed order attachments, the rest can be changed.
         ATTACH_SWATTER,
-        // Note that the next 2 symbols are only used as an index into the mesh
+        // Note that the next 4 symbols are only used as an index into the mesh
         // array; it will NEVER be actually assigned as an attachment type
         ATTACH_NOLOKS_SWATTER,
         ATTACH_SWATTER_ANIM,
+        ATTACH_SWATTER_SPAWN,
+        ATTACH_SWATTER_DESPAWN,
         ATTACH_BUBBLEGUM_SHIELD,
         ATTACH_NOLOK_BUBBLEGUM_SHIELD,
         ATTACH_MAX,
@@ -112,6 +114,9 @@ private:
     /** Sound for exploding bubble gum shield */
     SFXBase          *m_bubble_explode_sound;
 
+    /** Whether or not this class should handle a default spawning animation */
+    bool             m_default_anim;
+
 public:
           Attachment(AbstractKart* kart);
          ~Attachment();
@@ -150,6 +155,9 @@ public:
     // ------------------------------------------------------------------------
     /** Return the currently associated scene node (used by e.g the swatter) */
     scene::IAnimatedMeshSceneNode* getNode() {return m_node;}
+    // ------------------------------------------------------------------------
+    /** Prevents the attachment from spawning with the default scaling anim. */
+    void prevent_default_spawn_anim() { m_default_anim = false; }
     // ------------------------------------------------------------------------
     void reset()
     {
