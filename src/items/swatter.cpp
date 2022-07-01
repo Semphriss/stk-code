@@ -48,6 +48,12 @@
 #define SWAT_ANGLE_MAX  135
 #define SWAT_ANGLE_OFFSET (90.0f + 15.0f)
 #define SWATTER_ANIMATION_SPEED 100.0f
+#define SWATTER_ANIM_END_FRAME 39
+// We added 60 frames to swatter.spm after the hitting animation
+// See the comment in source code below:
+// Avoid swatter near the start and the end lifetime of swatter
+// to make sure all clients know the existence of swatter each other
+#define SWATTER_SCALE_FRAMES 60
 
 // ----------------------------------------------------------------------------
 /** Constructor: creates a swatter at a given attachment for a kart. If there
@@ -189,35 +195,44 @@ void Swatter::updateGraphics(float dt)
             else
                 m_swat_sound = SFXManager::get()->createSoundSource("swatter");
         }
-        if (!m_discard_now)
+
+        switch (m_animation_phase)
         {
-            switch (m_animation_phase)
+        case SWATTER_AIMING:
             {
-            case SWATTER_AIMING:
+                pointToTarget();
+                m_played_swatter_animation = false;
+                if (m_scene_node &&
+                    (m_swatter_duration - m_attachment->getTicksLeft() < SWATTER_SCALE_FRAMES ||
+                    m_discard_ticks - World::getWorld()->getTicksSinceStart() < SWATTER_SCALE_FRAMES))
                 {
-                    pointToTarget();
-                    m_played_swatter_animation = false;
+                    int ticks = m_swatter_duration - m_attachment->getTicksLeft();
+                    if (m_discard_ticks - World::getWorld()->getTicksSinceStart() < SWATTER_SCALE_FRAMES)
+                        ticks = m_discard_ticks - World::getWorld()->getTicksSinceStart();
+                    m_scene_node->setFrameLoop(SWATTER_ANIM_END_FRAME + 1, SWATTER_ANIM_END_FRAME + 1 + 60);
+                    m_scene_node->setCurrentFrame(SWATTER_ANIM_END_FRAME + 1 + ticks);
                 }
-                break;
-            case SWATTER_TO_TARGET:
-                {
-                    if (!m_played_swatter_animation)
-                    {
-                        m_played_swatter_animation = true;
-                        // Setup the animation
-                        m_scene_node->setCurrentFrame(0.0f);
-                        m_scene_node->setAnimationSpeed(SWATTER_ANIMATION_SPEED);
-                        Vec3 swatter_pos =
-                            m_kart->getTrans()(Vec3(SWAT_POS_OFFSET));
-                        m_swat_sound->setPosition(swatter_pos);
-                        m_swat_sound->play();
-                    }
-                    pointToTarget();
-                }
-                break;
-            case SWATTER_FROM_TARGET:
-                break;
             }
+            break;
+        case SWATTER_TO_TARGET:
+            {
+                if (!m_played_swatter_animation)
+                {
+                    m_played_swatter_animation = true;
+                    // Setup the animation
+                    m_scene_node->setCurrentFrame(0.0f);
+                    m_scene_node->setFrameLoop(0, SWATTER_ANIM_END_FRAME);
+                    m_scene_node->setAnimationSpeed(SWATTER_ANIMATION_SPEED);
+                    Vec3 swatter_pos =
+                        m_kart->getTrans()(Vec3(SWAT_POS_OFFSET));
+                    m_swat_sound->setPosition(swatter_pos);
+                    m_swat_sound->play();
+                }
+                pointToTarget();
+            }
+            break;
+        case SWATTER_FROM_TARGET:
+            break;
         }
     }
 #endif
@@ -240,79 +255,80 @@ bool Swatter::updateAndTestFinished(int ticks)
     if (m_bomb_remaining != -1)
         return false;
 
-    if (!m_discard_now)
+    switch (m_animation_phase)
     {
-        switch (m_animation_phase)
+    case SWATTER_AIMING:
         {
-        case SWATTER_AIMING:
+            if (m_discard_now)
+                break;
+
+            // Avoid swatter near the start and the end lifetime of swatter
+            // to make sure all clients know the existence of swatter each other
+            if (m_swatter_duration - m_attachment->getTicksLeft() < 60 ||
+                m_attachment->getTicksLeft() < 90) // ~20 and ~60 below
+                return false;
+
+            chooseTarget();
+            if (!m_closest_kart)
+                break;
+
+            // Get the node corresponding to the joint at the center of the
+            // swatter (by swatter, I mean the thing hold in the hand, not
+            // the whole thing)
+            // The joint node doesn't update in server without graphics,
+            // so an approximate position is used
+            //scene::ISceneNode* swatter_node =
+            //    m_scene_node->getJointNode("Swatter");
+            //assert(swatter_node);
+            //Vec3 swatter_pos = swatter_node->getAbsolutePosition();
+            Vec3 swatter_pos = m_kart->getTrans()(Vec3(SWAT_POS_OFFSET));
+
+            float dist2 = (m_closest_kart->getXYZ()-swatter_pos).length2();
+            float min_dist2
+                    = m_kart->getKartProperties()->getSwatterDistance();
+
+            if (dist2 < min_dist2 && !m_kart->isGhostKart())
             {
-                // Avoid swatter near the start and the end lifetime of swatter
-                // to make sure all clients know the existence of swatter each other
-                if (m_swatter_duration - m_attachment->getTicksLeft() < 60 ||
-                    m_attachment->getTicksLeft() < 90) // ~20 and ~60 below
-                    return false;
-
-                chooseTarget();
-                if (!m_closest_kart)
-                    break;
-
-                // Get the node corresponding to the joint at the center of the
-                // swatter (by swatter, I mean the thing hold in the hand, not
-                // the whole thing)
-                // The joint node doesn't update in server without graphics,
-                // so an approximate position is used
-                //scene::ISceneNode* swatter_node =
-                //    m_scene_node->getJointNode("Swatter");
-                //assert(swatter_node);
-                //Vec3 swatter_pos = swatter_node->getAbsolutePosition();
-                Vec3 swatter_pos = m_kart->getTrans()(Vec3(SWAT_POS_OFFSET));
-
-                float dist2 = (m_closest_kart->getXYZ()-swatter_pos).length2();
-                float min_dist2
-                     = m_kart->getKartProperties()->getSwatterDistance();
-
-                if (dist2 < min_dist2 && !m_kart->isGhostKart())
-                {
-                    // Start squashing
-                    m_animation_phase = SWATTER_TO_TARGET;
-                    m_swatter_animation_ticks =
-                        m_attachment->getTicksLeft() - 20;
-                }
-            }
-            break;
-        case SWATTER_TO_TARGET:
-            {
-                // Did we just finish the first part of the movement?
-                if (m_attachment->getTicksLeft() < m_swatter_animation_ticks &&
-                    m_attachment->getTicksLeft() > 60)
-                {
-                    // Squash the karts and items around and
-                    // change the current phase
-                    squashThingsAround();
-                    m_animation_phase = SWATTER_FROM_TARGET;
-                    const int end_ticks = ticks_start + 60;
-                    if (RaceManager::get()->isBattleMode() ||
-                        RaceManager::get()->isSoccerMode())
-                    {
-                        // Remove swatter from kart in arena gameplay
-                        // after one successful hit
-                        m_discard_now = true;
-                        m_discard_ticks = end_ticks;
-                    }
-                    m_swatter_animation_ticks =
-                        m_attachment->getTicksLeft() - 60;
-                }
-            }
-            break;
-        case SWATTER_FROM_TARGET:
-            {
-                if (m_attachment->getTicksLeft() < m_swatter_animation_ticks &&
-                    m_attachment->getTicksLeft() > 0)
-                    m_animation_phase = SWATTER_AIMING;
-            break;
+                // Start squashing
+                m_animation_phase = SWATTER_TO_TARGET;
+                m_swatter_animation_ticks =
+                    m_attachment->getTicksLeft() - 20;
             }
         }
+        break;
+    case SWATTER_TO_TARGET:
+        {
+            // Did we just finish the first part of the movement?
+            if (m_attachment->getTicksLeft() < m_swatter_animation_ticks &&
+                m_attachment->getTicksLeft() > 60)
+            {
+                // Squash the karts and items around and
+                // change the current phase
+                squashThingsAround();
+                m_animation_phase = SWATTER_FROM_TARGET;
+                const int end_ticks = ticks_start + 60;
+                if (RaceManager::get()->isBattleMode() ||
+                    RaceManager::get()->isSoccerMode())
+                {
+                    // Remove swatter from kart in arena gameplay
+                    // after one successful hit
+                    //m_discard_now = true;
+                    m_discard_ticks = end_ticks + SWATTER_SCALE_FRAMES;
+                }
+                m_swatter_animation_ticks =
+                    m_attachment->getTicksLeft() - 60;
+            }
+        }
+        break;
+    case SWATTER_FROM_TARGET:
+        {
+            if (m_attachment->getTicksLeft() < m_swatter_animation_ticks &&
+                m_attachment->getTicksLeft() > 0)
+                m_animation_phase = SWATTER_AIMING;
+            break;
+        }
     }
+
     return false;
 }   // updateAndTestFinished
 
@@ -486,3 +502,11 @@ void Swatter::saveState(BareNetworkString* buffer) const
     else
         buffer->addUInt32(m_discard_ticks);
 }   // saveState
+
+// ----------------------------------------------------------------------------
+bool Swatter::playingScalingAnimation() const
+{
+    if (m_bomb_remaining != -1)
+        return false;
+    return m_swatter_duration - m_attachment->getTicksLeft() < SWATTER_SCALE_FRAMES + 30;
+}   // playingScalingAnimation

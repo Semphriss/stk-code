@@ -104,6 +104,8 @@ public:
     virtual void restoreState(BareNetworkString *buffer) OVERRIDE;
     // ------------------------------------------------------------------------
     virtual void saveState(BareNetworkString *buffer) const OVERRIDE;
+    // ------------------------------------------------------------------------
+    bool playingScalingAnimation() const;
 
 private:
     /** Determine the nearest kart or item and update the current target accordingly */

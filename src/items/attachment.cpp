@@ -626,6 +626,12 @@ void Attachment::updateGraphics(float dt)
             m_node->setScale(core::vector3df(
                 wanted_node_scale, wanted_node_scale, wanted_node_scale));
         }
+        if (Swatter* swatter = dynamic_cast<Swatter*>(m_plugin))
+        {
+            if (swatter->playingScalingAnimation())
+                m_node->setScale(core::vector3df(1.0f, 1.0f, 1.0f));
+        }
+
         int slow_flashes = stk_config->time2Ticks(3.0f);
         if (is_shield && m_ticks_left < slow_flashes)
         {
